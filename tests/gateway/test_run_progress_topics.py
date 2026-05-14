@@ -644,6 +644,21 @@ async def test_run_agent_surfaces_interim_commentary_by_default(monkeypatch, tmp
 
 
 @pytest.mark.asyncio
+async def test_run_agent_email_defaults_to_result_only(monkeypatch, tmp_path):
+    adapter, result = await _run_with_agent(
+        monkeypatch,
+        tmp_path,
+        CommentaryAgent,
+        session_id="sess-email-result-only",
+        config_data={},
+        platform=Platform.EMAIL,
+    )
+
+    assert result.get("already_sent") is not True
+    assert not any(call["content"] == "I'll inspect the repo first." for call in adapter.sent)
+
+
+@pytest.mark.asyncio
 async def test_run_agent_suppresses_interim_commentary_when_disabled(monkeypatch, tmp_path):
     adapter, result = await _run_with_agent(
         monkeypatch,
