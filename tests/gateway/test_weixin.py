@@ -181,6 +181,63 @@ class TestWeixinChunking:
         assert chunks == ["第一行", "第二行", "第三行"]
 
 
+class TestWeixinReconnectAndRetry:
+    @pytest.mark.asyncio
+    async def test_reconnect_refreshes_poll_session_and_credentials(self, tmp_path):
+        adapter = _make_adapter()
+        adapter._hermes_home = str(tmp_path)
+        adapter._account_id = "acct"
+        adapter._base_url = "https://old.example.com"
+        old_session = AsyncMock()
+        old_session.closed = False
+        adapter._poll_session = old_session
+        adapter._token_store.restore = Mock()
+
+        weixin.save_weixin_account(
+            str(tmp_path),
+            account_id="acct",
+            token="new-token",
+            base_url="https://new.example.com",
+        )
+
+        with patch("gateway.platforms.weixin.aiohttp.ClientSession") as client_session_cls:
+            new_session = Mock()
+            new_session.closed = False
+            client_session_cls.return_value = new_session
+
+            ok = await adapter._reconnect()
+
+        assert ok is True
+        assert adapter._token == "new-token"
+        assert adapter._base_url == "https://new.example.com"
+        old_session.close.assert_awaited_once()
+        client_session_cls.assert_called_once()
+        assert adapter._poll_session is new_session
+        adapter._token_store.restore.assert_called_once_with("acct")
+
+    @pytest.mark.asyncio
+    async def test_send_uses_dynamic_inter_chunk_delay_for_multiple_chunks(self):
+        adapter = _make_adapter()
+        adapter._send_session = object()
+        adapter._token = "tok"
+        adapter._token_store.get = Mock(return_value=None)
+        adapter._send_chunk_delay_seconds = 0.25
+        adapter.extract_media = Mock(return_value=([], "one\ntwo\nthree"))
+        adapter.extract_images = Mock(return_value=([], "one\ntwo\nthree"))
+        adapter.extract_local_files = Mock(return_value=([], "one\ntwo\nthree"))
+        adapter.format_message = Mock(side_effect=lambda s: s)
+        adapter._split_text = Mock(return_value=["one", "two", "three"])
+        adapter._send_text_chunk = AsyncMock()
+
+        with patch("gateway.platforms.weixin.asyncio.sleep", new=AsyncMock()) as sleep_mock:
+            result = await adapter.send("user1", "ignored")
+
+        assert result.success is True
+        assert adapter._send_text_chunk.await_count == 3
+        sleep_mock.assert_any_await(2.9)
+        assert sleep_mock.await_count == 2
+
+
 class TestWeixinConfig:
     def test_apply_env_overrides_configures_weixin(self):
         config = GatewayConfig()
