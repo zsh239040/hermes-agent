@@ -127,6 +127,25 @@ class TestHandleResumeCommand:
         db.close()
 
     @pytest.mark.asyncio
+    async def test_resume_by_session_id(self, tmp_path):
+        """Accepts an exact session ID, not just a title."""
+        from hermes_state import SessionDB
+        db = SessionDB(db_path=tmp_path / "state.db")
+        db.create_session("20260514_015447_b71ec89f", "telegram")
+        db.set_session_title("20260514_015447_b71ec89f", "My Project")
+        db.create_session("current_session_001", "telegram")
+
+        event = _make_event(text="/resume 20260514_015447_b71ec89f")
+        runner = _make_runner(session_db=db, current_session_id="current_session_001",
+                              event=event)
+        result = await runner._handle_resume_command(event)
+
+        assert "Resumed" in result
+        call_args = runner.session_store.switch_session.call_args
+        assert call_args[0][1] == "20260514_015447_b71ec89f"
+        db.close()
+
+    @pytest.mark.asyncio
     async def test_resume_nonexistent_name(self, tmp_path):
         """Returns error for unknown session name."""
         from hermes_state import SessionDB

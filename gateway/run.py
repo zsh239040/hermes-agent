@@ -11576,8 +11576,16 @@ class GatewayRunner:
                 logger.debug("Failed to list titled sessions: %s", e)
                 return t("gateway.resume.list_failed", error=e)
 
-        # Resolve the name to a session ID.
-        target_id = self._session_db.resolve_session_by_title(name)
+        # Resolve the argument as either an exact session ID or a titled session.
+        target_id = None
+        try:
+            session = self._session_db.get_session(name)
+            if session:
+                target_id = session["id"]
+        except Exception:
+            target_id = None
+        if not target_id:
+            target_id = self._session_db.resolve_session_by_title(name)
         if not target_id:
             return t("gateway.resume.not_found", name=name)
         # Compression creates child continuations that hold the live transcript.
@@ -14423,10 +14431,12 @@ class GatewayRunner:
         # in chat platforms while opting into concise mid-turn updates.
         interim_assistant_messages_enabled = (
             source.platform != Platform.WEBHOOK
-            and is_truthy_value(
-                display_config.get("interim_assistant_messages"),
-                default=True,
-            )
+            and bool(resolve_display_setting(
+                user_config,
+                platform_key,
+                "interim_assistant_messages",
+                True,
+            ))
         )
         
         # Queue for progress messages (thread-safe)
