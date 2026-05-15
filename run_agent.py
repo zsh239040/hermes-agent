@@ -4697,11 +4697,24 @@ class AIAgent:
                     ]
                 elif isinstance(msg.get("tool_calls"), list):
                     tool_calls_data = msg["tool_calls"]
+                tool_name = msg.get("tool_name")
+                if (
+                    tool_name is None
+                    and role == "user"
+                    and isinstance(content, str)
+                    and content.startswith("[CONTEXT COMPACTION")
+                ):
+                    # Compression handoff summaries are synthetic context, not a
+                    # real fresh user instruction. Persist an explicit marker so
+                    # history viewers can avoid rendering them as duplicated user
+                    # prompts while preserving the exact transcript text needed
+                    # for session continuation/replay.
+                    tool_name = "context_compaction"
                 self._session_db.append_message(
                     session_id=self.session_id,
                     role=role,
                     content=content,
-                    tool_name=msg.get("tool_name"),
+                    tool_name=tool_name,
                     tool_calls=tool_calls_data,
                     tool_call_id=msg.get("tool_call_id"),
                     finish_reason=msg.get("finish_reason"),

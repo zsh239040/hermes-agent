@@ -100,6 +100,10 @@ class TestFlushAfterCompression:
                 f"Expected 5 compressed messages in new session, got {len(new_rows)}. "
                 f"Compression persistence bug: messages not written to SQLite."
             )
+            assert new_rows[0]["tool_name"] == "context_compaction", (
+                "Expected compaction handoff to be tagged as synthetic context so "
+                "history viewers do not render it as a duplicated user command."
+            )
 
     def test_flush_with_stale_history_loses_messages(self):
         """Demonstrates the bug condition: stale conversation_history causes data loss."""
